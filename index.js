@@ -10,9 +10,18 @@ app.use(cors());
 
 const db = mysql.createConnection({
   user: "u1497732_default",
-  host: "localhost",
+  host: "server114.hosting.reg.ru",
   password: "KgB63sJwwRE28Gqc",
   database: "u1497732_yachting-spbsu",
+  port:3306,
+});
+
+db.connect((err)=>{
+	if(err){
+		console.log(err)
+	}else{
+		console.log("Connected!")
+	}
 });
 
 app.post('/register', (req, res)=>{
@@ -23,7 +32,7 @@ app.post('/register', (req, res)=>{
 	const passwordReg = req.body.passwordReg;
 
 	db.query(
-		"INSERT INTO participant (participant, secondName, email, password) VALUES (?, ?, ?, ?)", 
+		"INSERT INTO participant (firstName, secondName, email, password) VALUES (?, ?, ?, ?)", 
 		[nameReg,secondNameReg,emailReg,passwordReg], 
 		(err, result) => {
 			console.log(err);
@@ -34,6 +43,3 @@ app.post('/register', (req, res)=>{
 app.listen(3001, ()=>{
 	console.log("running server");
 })
-process.on('uncaughtException', function (err) {
-    console.log(err);
-});
