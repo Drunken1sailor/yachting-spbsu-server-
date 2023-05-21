@@ -34,3 +34,6 @@ app.post('/register', (req, res)=>{
 app.listen(3001, ()=>{
 	console.log("running server");
 })
+process.on('uncaughtException', function (err) {
+    console.log(err);
+});
