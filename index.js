@@ -1,15 +1,18 @@
 const express = require("express");
 const mysql = require("mysql");
 const cors = require("cors");
-const bcrypt = require('bcrypt');
+const bcrypt = require("bcrypt");
+const multer = require("multer");
 const bodyParser = require("body-parser"); 
 const cookieParser = require("cookie-parser"); 
 const session = require("express-session"); 
+const fileUpload = require("express-fileupload");
+const path = require('path');
 
 const saltRounds = 10;
-
 const app = express();
 
+app.use(express.static(path.join(__dirname, 'src')));
 app.use(express.json());
 app.use(cors({
 	origin: ["http://localhost:3000"],
@@ -28,6 +31,17 @@ app.use(session({
 		expires:60*60*24
 	}
 }));
+app.use(fileUpload());
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, './src/img/news/');
+  },
+  filename: (req, file, cb) => {
+    cb(null, file.originalname);
+  },
+});
+const uploadNews = multer({ storage });
 
 const db = mysql.createConnection({
   user: "u1497732_default",
@@ -101,14 +115,43 @@ app.post('/login', (req, res)=>{
 	);
 });
 
+
+app.get('/getNews', (req,res)=>{
+	db.query(
+    "SELECT * FROM news",
+    (err, result) => {
+      if (err) {
+	      console.error('Ошибка при выполнении запроса:', error);
+	      res.status(500).json({ error: 'Ошибка при выполнении запроса' });
+	    } else {
+	      res.json(result);
+	    }
+    }
+  );
+});
+
 app.post('/news', (req, res) => {
   const title = req.body.title;
   const date = req.body.date;
   const description = req.body.description;
+  const file = req.files.file;
+  const filePath = './src/img/news/' + file.name;
+  let checkbox = req.body.checkbox;
+
+  if (checkbox=="true"){
+  	checkbox=1
+  }else{checkbox=0}
+
+  file.mv(filePath , (error) => {
+    if (error) {
+      console.error(error);
+      return res.status(500).json({ message: 'Ошибка при сохранении файла' });
+    }	
+  	});
 
   db.query(
-    "INSERT INTO news (title, date, body) VALUES (?, ?, ?)",
-    [title, date, description],
+    "INSERT INTO news (title, date, body, img, isMain) VALUES (?, ?, ?, ?, ?)",
+    [title, date, description, filePath, checkbox],
     (err, result) => {
       if (err) {
         console.log(err);
@@ -140,15 +183,26 @@ app.post('/event', (req, res) => {
     }
   );
 });
-
+app.get('/getCourse', (req,res)=>{
+	db.query(
+    "SELECT * FROM course",
+    (err, result) => {
+      if (err) {
+	      console.error('Ошибка при выполнении запроса:', error);
+	      res.status(500).json({ error: 'Ошибка при выполнении запроса' });
+	    } else {
+	      res.json(result);
+	    }
+    }
+  );
+});
 app.post('/courseReg', (req, res) => {
-  const name = req.body.name;
-  const secondName = req.body.secondName;
-  const mail = req.body.mail;
+  const participantID = req.body.participantID;
+  const courseID = 1;
 
   db.query(
-    "INSERT INTO courseParticipant (name, secondName, mail) VALUES (?, ?, ?)",
-    [name, secondName, mail],
+    "INSERT INTO courseParticipantList (courseID, participantID) VALUES (?, ?)",
+    [courseID, participantID],
     (err, result) => {
       if (err) {
         console.log(err);
@@ -160,6 +214,91 @@ app.post('/courseReg', (req, res) => {
     }
   );
 });
+
+app.post('/orgReg', (req, res)=>{
+	const nameReg = req.body.nameReg;
+	const secondNameReg = req.body.secondNameReg;
+	const emailReg = req.body.emailReg;
+	const passwordReg = req.body.passwordReg;
+
+	bcrypt.hash(passwordReg, saltRounds, (err, hash) =>{
+		if(err){console.log(err);}
+		db.query(
+			"INSERT INTO organizer (name, secondName, mail, password) VALUES (?, ?, ?, ?)", 
+			[nameReg,secondNameReg,emailReg,hash], 
+			(err, result) => {
+				console.log(err);
+			}
+		);
+	});
+});
+
+// app.get('/lk', (req,res)=>{
+// 	const participantID = req.body.participantID;
+// 	db.query(
+//     "SELECT * FROM courseParticipantList WHERE participantID = ?",
+//     [participantID],
+//     (err, result) => {
+//       if (err) {
+// 	      console.error('Ошибка при выполнении запроса:', error);
+// 	      res.status(500).json({ error: 'Ошибка при выполнении запроса' });
+// 	    } else {
+// 	       res.json(result);
+// 	      console.log(result);
+// 	      db.query(
+// 		    "SELECT * FROM course WHERE courseID = ?",
+// 		    [participantID],
+// 		    (err, result) => {
+// 		      if (err) {
+// 			      console.error('Ошибка при выполнении запроса:', error);
+// 			      res.status(500).json({ error: 'Ошибка при выполнении запроса' });
+// 			    } else {
+// 			      // res.json(result);
+// 			    }
+// 		    }
+// 		  );
+// 	    }
+//     }
+//   );
+// });
+
+app.post('/lk', async (req, res) => {
+  try {
+    const participantID = req.body.participantID;
+    
+    // Получение данных из таблицы courseParticipantList
+    const participantListData = await queryDatabase("SELECT * FROM courseParticipantList WHERE participantID = ?", [participantID]);
+    
+    if (participantListData.length === 0) {
+      res.status(404).json({ error: 'Данные не найдены' });
+      return;
+    }
+    
+    const courseID = participantListData[0].courseID;
+    
+    // Получение данных из таблицы course
+    const courseData = await queryDatabase("SELECT * FROM course WHERE courseID = ?", [courseID]);
+    
+    res.json(courseData);
+  } catch (error) {
+    console.error('Ошибка при выполнении запроса:', error);
+    res.status(500).json({ error: 'Ошибка при выполнении запроса' });
+  }
+});
+
+// Функция для выполнения запросов к базе данных
+function queryDatabase(sql, params) {
+  return new Promise((resolve, reject) => {
+    db.query(sql, params, (err, result) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(result);
+      }
+    });
+  });
+}
+
 
 app.listen(3001, ()=>{
 	console.log("running server");
