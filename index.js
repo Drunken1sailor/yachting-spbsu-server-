@@ -15,7 +15,7 @@ const app = express();
 app.use(express.static(path.join(__dirname, 'src')));
 app.use(express.json());
 app.use(cors({
-	origin: ["http://localhost:3000"],
+	origin: ["http://yachting-spbsu.ru"],
 	methods: ["GET", "POST"],
 	credentials: true
 }));
