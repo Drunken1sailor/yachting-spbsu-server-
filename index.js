@@ -15,7 +15,7 @@ const app = express();
 app.use(express.static(path.join(__dirname, 'src')));
 app.use(express.json());
 app.use(cors({
-	origin: ["http://yachting-spbsu.ru"],
+	origin: ["http://localhost:3000"],
 	methods: ["GET", "POST"],
 	credentials: true
 }));
@@ -65,16 +65,53 @@ app.post('/register', (req, res)=>{
 	const emailReg = req.body.emailReg;
 	const passwordReg = req.body.passwordReg;
 
-	bcrypt.hash(passwordReg, saltRounds, (err, hash) =>{
-		if(err){console.log(err);}
-		db.query(
-			"INSERT INTO participant (firstName, secondName, email, password) VALUES (?, ?, ?, ?)", 
-			[nameReg,secondNameReg,emailReg,hash], 
-			(err, result) => {
-				console.log(err);
-			}
-		);
-	});
+
+  db.query(
+    "SELECT * FROM participant WHERE email = ?", 
+    emailReg, 
+    (err, result) => {
+      if(err){
+        res.send({err: err});
+      }
+
+      if(result && result.length > 0){
+        res.send({message: "Пользователь с таким адресом почты уже существует!"})
+      }else{
+        bcrypt.hash(passwordReg, saltRounds, (errBcrypt, hash) =>{
+          if(errBcrypt){console.log(errBcrypt);}
+          db.query(
+            "INSERT INTO participant (firstName, secondName, email, password) VALUES (?, ?, ?, ?)", 
+            [nameReg,secondNameReg,emailReg,hash], 
+            (err2, result2) => {
+              console.log(err);
+              if(result2.length > 0){
+                
+                db.query("SELECT * FROM participant WHERE email = ?", emailReg, (err3, result3)=>{
+
+                  if(result3.length > 0){
+                    req.session.user = result3;
+                    console.log(req.session.user);
+                    res.send(result3);
+                  }else{
+                    res.send({message: err3});
+                  }
+
+                });
+
+
+                res.send(result2);
+              }else{
+                res.send({message: err2});
+              }
+            }
+          );
+        });
+      }
+    }
+  );
+
+
+	
 });
 
 app.get('/login', (req,res)=>{
@@ -97,7 +134,7 @@ app.post('/login', (req, res)=>{
 				res.send({err: err});
 			}
 
-			if(result.length > 0){
+			if(result && result.length > 0){
 				bcrypt.compare(password, result[0].password, (error, response) => {
 					if(response){
 						req.session.user = result;
@@ -121,8 +158,8 @@ app.get('/getNews', (req,res)=>{
     "SELECT * FROM news",
     (err, result) => {
       if (err) {
-	      console.error('Ошибка при выполнении запроса:', error);
-	      res.status(500).json({ error: 'Ошибка при выполнении запроса' });
+	      console.error('Ошибка при выполнении запроса:', err);
+	      res.status(500).json({ err: 'Ошибка при выполнении запроса' });
 	    } else {
 	      res.json(result);
 	    }
@@ -183,6 +220,7 @@ app.post('/event', (req, res) => {
     }
   );
 });
+
 app.get('/getCourse', (req,res)=>{
 	db.query(
     "SELECT * FROM course",
@@ -196,6 +234,7 @@ app.get('/getCourse', (req,res)=>{
     }
   );
 });
+
 app.post('/courseReg', (req, res) => {
   const participantID = req.body.participantID;
   const courseID = 1;
@@ -215,6 +254,39 @@ app.post('/courseReg', (req, res) => {
   );
 });
 
+app.post('/orgLogin', (req, res)=>{
+  const email = req.body.email;
+  const password = req.body.password;
+
+  db.query(
+    "SELECT * FROM organizer WHERE email = ?", 
+    email, 
+    (err, result) => {
+      if(err){
+        res.send({err: err});
+      }
+
+      if(result && result.length > 0){
+        bcrypt.compare(password, result[0].password, (error, response) => {
+          if(response){
+            req.session.user = result;
+            console.log(req.session.user);
+            res.send(result);
+            return;
+          }else{
+            res.send({message: "Неправильный пароль!"})
+            return;
+          }
+        });
+      }else{
+        res.send({message: "Пользователь с таким адресом почты не найден!"});
+        return;
+      }
+      
+    }
+  );
+});
+
 app.post('/orgReg', (req, res)=>{
 	const nameReg = req.body.nameReg;
 	const secondNameReg = req.body.secondNameReg;
@@ -228,6 +300,7 @@ app.post('/orgReg', (req, res)=>{
 			[nameReg,secondNameReg,emailReg,hash], 
 			(err, result) => {
 				console.log(err);
+        res.send(result);
 			}
 		);
 	});
@@ -261,6 +334,18 @@ app.post('/orgReg', (req, res)=>{
 //     }
 //   );
 // });
+
+app.post('/logout', async (req, res) => {
+  try{
+    res.clearCookie('userID');
+    res.send('Сookie удалено!');
+  }
+  catch(err){
+    console.log(err);
+    res.send({message: "Что-то пошло не так!"})
+  }
+});
+
 
 app.post('/lk', async (req, res) => {
   try {
