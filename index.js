@@ -71,11 +71,13 @@ app.post('/register', (req, res)=>{
     emailReg, 
     (err, result) => {
       if(err){
-        res.send({err: err});
+        res.send({message: err.message});
+        return;
       }
 
       if(result && result.length > 0){
-        res.send({message: "Пользователь с таким адресом почты уже существует!"})
+        res.send({message: "Пользователь с таким адресом почты уже существует!"});
+        return;
       }else{
         bcrypt.hash(passwordReg, saltRounds, (errBcrypt, hash) =>{
           if(errBcrypt){console.log(errBcrypt);}
@@ -83,35 +85,21 @@ app.post('/register', (req, res)=>{
             "INSERT INTO participant (firstName, secondName, email, password) VALUES (?, ?, ?, ?)", 
             [nameReg,secondNameReg,emailReg,hash], 
             (err2, result2) => {
-              console.log(err);
-              if(result2.length > 0){
-                
-                db.query("SELECT * FROM participant WHERE email = ?", emailReg, (err3, result3)=>{
-
-                  if(result3.length > 0){
-                    req.session.user = result3;
-                    console.log(req.session.user);
-                    res.send(result3);
-                  }else{
-                    res.send({message: err3});
-                  }
-
-                });
-
-
+              if(err2){
+                res.send({message: err2.message});
+                return;
+              }
+              else{
+                req.session.user = result2;
+                console.log(req.session.user);
                 res.send(result2);
-              }else{
-                res.send({message: err2});
               }
             }
           );
         });
       }
     }
-  );
-
-
-	
+  );	
 });
 
 app.get('/login', (req,res)=>{
@@ -166,6 +154,36 @@ app.get('/getNews', (req,res)=>{
     }
   );
 });
+app.get('/getEvents', (req,res)=>{
+  db.query(
+    "SELECT * FROM event",
+    (err, result) => {
+      if (err) {
+        console.error('Ошибка при выполнении запроса:', err);
+        res.status(500).json({ err: 'Ошибка при выполнении запроса' });
+      } else {
+        res.json(result);
+      }
+    }
+  );
+});
+
+app.get('/getNewsElement', (req,res)=>{
+  const newsID = req.body.newsID;
+
+  db.query(
+    "SELECT * FROM news WHERE newsId = ?",
+    [newsID],
+    (err, result) => {
+      if (err) {
+        console.error('Ошибка при выполнении запроса:', err);
+        res.send({ message: err.message });
+      } else {
+        res.json(result);
+      }
+    }
+  );
+});
 
 app.post('/news', (req, res) => {
   const title = req.body.title;
@@ -205,16 +223,45 @@ app.post('/event', (req, res) => {
   const title = req.body.title;
   const date = req.body.date;
   const description = req.body.description;
+  const file = req.files.file;
+  const filePath = './src/img/events/' + file.name;
+
+  file.mv(filePath , (error) => {
+    if (error) {
+      console.error(error);
+      return res.status(500).json({ message: 'Ошибка при сохранении файла' });
+    } 
+    });
 
   db.query(
-    "INSERT INTO event (title, date, body) VALUES (?, ?, ?)",
-    [title, date, description],
+    "INSERT INTO event (title, date, body, img) VALUES (?, ?, ?, ?)",
+    [title, date, description, filePath],
     (err, result) => {
       if (err) {
         console.log(err);
         res.send({ message: "Ошибка при сохранении данных в базу данных" });
       } else {
         console.log(result);
+        res.send({ message: "Данные успешно сохранены в базу данных" });
+      }
+    }
+  );
+});
+
+app.post('/course', (req, res) => {
+  const title = req.body.title;
+  const date = req.body.date;
+  const anons = req.body.anons;
+  const beginTime = req.body.beginTime;
+  const duration = req.body.duration;
+
+  db.query(
+    "UPDATE course SET title = ?, date = ?, anons = ?, beginTime = ?, duration = ? WHERE courseID = 1",
+    [title, date, anons, beginTime, duration],
+    (err, result) => {
+      if (err) {
+        res.send({ message: "Ошибка при сохранении данных в базу данных" });
+      } else {
         res.send({ message: "Данные успешно сохранены в базу данных" });
       }
     }
@@ -223,35 +270,46 @@ app.post('/event', (req, res) => {
 
 app.get('/getCourse', (req,res)=>{
 	db.query(
-    "SELECT * FROM course",
+    "SELECT * FROM course WHERE courseID = 1",
     (err, result) => {
       if (err) {
-	      console.error('Ошибка при выполнении запроса:', error);
-	      res.status(500).json({ error: 'Ошибка при выполнении запроса' });
-	    } else {
-	      res.json(result);
-	    }
+        console.error('Ошибка при выполнении запроса:', err);
+        res.status(500).json({ err: 'Ошибка при выполнении запроса' });
+      } else {
+        res.json(result);
+      }
     }
   );
 });
 
-app.post('/courseReg', (req, res) => {
+app.post('/regOnCourse', (req, res) => {
   const participantID = req.body.participantID;
   const courseID = 1;
 
-  db.query(
-    "INSERT INTO courseParticipantList (courseID, participantID) VALUES (?, ?)",
-    [courseID, participantID],
-    (err, result) => {
-      if (err) {
-        console.log(err);
-        res.send({ message: "Ошибка при сохранении данных в базу данных" });
-      } else {
-        console.log(result);
-        res.send({ message: "Данные успешно сохранены в базу данных" });
-      }
+  db.query("SELECT * FROM courseParticipantList WHERE participantID = ?",[participantID],(err,result)=>{
+    if (err) {
+        res.send({message: err.message});
+        return;
     }
-  );
+    if(result && result.length > 0){
+      res.send({message: "Вы уже записаны на данный курс!"});
+      return;
+    }else{
+      db.query(
+        "INSERT INTO courseParticipantList (courseID, participantID) VALUES (?, ?)",
+        [courseID, participantID],
+        (err2, result2) => {
+          if (err2) {
+            res.send({message: err2.message});
+          } else {
+            res.send(result2);
+          }
+        }
+      );
+    }
+  });
+
+  
 });
 
 app.post('/orgLogin', (req, res)=>{
@@ -259,11 +317,12 @@ app.post('/orgLogin', (req, res)=>{
   const password = req.body.password;
 
   db.query(
-    "SELECT * FROM organizer WHERE email = ?", 
+    "SELECT * FROM organizer WHERE mail = ?", 
     email, 
     (err, result) => {
       if(err){
-        res.send({err: err});
+        res.send({message: err.message});
+        return;
       }
 
       if(result && result.length > 0){
@@ -274,7 +333,7 @@ app.post('/orgLogin', (req, res)=>{
             res.send(result);
             return;
           }else{
-            res.send({message: "Неправильный пароль!"})
+            res.send({message: "Неправильный пароль!"});
             return;
           }
         });
@@ -293,10 +352,10 @@ app.post('/orgReg', (req, res)=>{
 	const emailReg = req.body.emailReg;
 	const passwordReg = req.body.passwordReg;
 
-	bcrypt.hash(passwordReg, saltRounds, (err, hash) =>{
+	bcrypt.hash(passwordReg, saltRounds, (error, hash) =>{
 		if(err){console.log(err);}
 		db.query(
-			"INSERT INTO organizer (name, secondName, mail, password) VALUES (?, ?, ?, ?)", 
+			"INSERT INTO organizer (firstName, secondName, mail, password) VALUES (?, ?, ?, ?)", 
 			[nameReg,secondNameReg,emailReg,hash], 
 			(err, result) => {
 				console.log(err);
@@ -305,35 +364,6 @@ app.post('/orgReg', (req, res)=>{
 		);
 	});
 });
-
-// app.get('/lk', (req,res)=>{
-// 	const participantID = req.body.participantID;
-// 	db.query(
-//     "SELECT * FROM courseParticipantList WHERE participantID = ?",
-//     [participantID],
-//     (err, result) => {
-//       if (err) {
-// 	      console.error('Ошибка при выполнении запроса:', error);
-// 	      res.status(500).json({ error: 'Ошибка при выполнении запроса' });
-// 	    } else {
-// 	       res.json(result);
-// 	      console.log(result);
-// 	      db.query(
-// 		    "SELECT * FROM course WHERE courseID = ?",
-// 		    [participantID],
-// 		    (err, result) => {
-// 		      if (err) {
-// 			      console.error('Ошибка при выполнении запроса:', error);
-// 			      res.status(500).json({ error: 'Ошибка при выполнении запроса' });
-// 			    } else {
-// 			      // res.json(result);
-// 			    }
-// 		    }
-// 		  );
-// 	    }
-//     }
-//   );
-// });
 
 app.post('/logout', async (req, res) => {
   try{
@@ -347,43 +377,47 @@ app.post('/logout', async (req, res) => {
 });
 
 
-app.post('/lk', async (req, res) => {
-  try {
-    const participantID = req.body.participantID;
+app.post('/getCourses', async (req, res) => {
+  const participantID = req.body.participantID;
+  const courseID = 1;
+  let isRegistered = false;
     
-    // Получение данных из таблицы courseParticipantList
-    const participantListData = await queryDatabase("SELECT * FROM courseParticipantList WHERE participantID = ?", [participantID]);
-    
-    if (participantListData.length === 0) {
-      res.status(404).json({ error: 'Данные не найдены' });
+  db.query("SELECT * FROM course INNER JOIN courseParticipantList ON course.courseID = courseParticipantList.courseID WHERE courseParticipantList.participantID = ?",
+   participantID, (err,result)=>{
+    if(err){
+      res.send({message: err.message});
       return;
     }
-    
-    const courseID = participantListData[0].courseID;
-    
-    // Получение данных из таблицы course
-    const courseData = await queryDatabase("SELECT * FROM course WHERE courseID = ?", [courseID]);
-    
-    res.json(courseData);
-  } catch (error) {
-    console.error('Ошибка при выполнении запроса:', error);
-    res.status(500).json({ error: 'Ошибка при выполнении запроса' });
-  }
+    if(result && result.length > 0){
+      res.send(result);
+      return;
+    }else{
+      res.send({message: "Записи на курсы отсутствуют!"});
+      return;
+    }
+  });
+  
 });
 
-// Функция для выполнения запросов к базе данных
-function queryDatabase(sql, params) {
-  return new Promise((resolve, reject) => {
-    db.query(sql, params, (err, result) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(result);
-      }
-    });
-  });
-}
 
+app.get('/participants', async (req, res) => {
+  db.query(
+  "SELECT * FROM participant INNER JOIN courseParticipantList ON participant.participantID = courseParticipantList.participantID WHERE courseParticipantList.courseID = 1",
+  (err, result) => {
+    if(err){
+      res.send({message: err.message});
+      return;
+    }
+    if(result && result.length > 0){
+      res.send(result);
+      return;
+    }else{
+      res.send({message: "Пользователей нет!"});
+      return;
+    }
+  }
+  );
+});
 
 app.listen(3001, ()=>{
 	console.log("running server");
