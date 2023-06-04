@@ -351,18 +351,35 @@ app.post('/orgReg', (req, res)=>{
 	const secondNameReg = req.body.secondNameReg;
 	const emailReg = req.body.emailReg;
 	const passwordReg = req.body.passwordReg;
-
-	bcrypt.hash(passwordReg, saltRounds, (error, hash) =>{
-		if(err){console.log(err);}
-		db.query(
-			"INSERT INTO organizer (firstName, secondName, mail, password) VALUES (?, ?, ?, ?)", 
-			[nameReg,secondNameReg,emailReg,hash], 
-			(err, result) => {
-				console.log(err);
-        res.send(result);
-			}
-		);
-	});
+  db.query(
+  "SELECT * FROM organizer WHERE mail = ?", 
+  emailReg, 
+  (err, result) => {
+    if(err){
+      res.send({message: err.message});
+      return;
+    }
+    if(result && result.length > 0){
+      res.send({message: "Пользователь с таким адресом почты уже существует!"});
+      return;
+    }else{
+      bcrypt.hash(passwordReg, saltRounds, (errBcrypt, hash) =>{
+        if(errBcrypt){console.log(errBcrypt);}
+        db.query(
+          "INSERT INTO organizer (firstName, secondName, mail, password) VALUES (?, ?, ?, ?)", 
+          [nameReg,secondNameReg,emailReg,hash], 
+          (err2, result2) => {
+            if(err2){
+              res.send({message: err2.message});
+              return;
+            }
+            else{
+              res.send(result2);
+            }
+          });
+      });
+    }
+  });
 });
 
 app.post('/logout', async (req, res) => {
